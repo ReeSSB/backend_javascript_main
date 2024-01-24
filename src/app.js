@@ -34,4 +34,11 @@ app.use(express.static("public"));
 // Secure can only be read by server and only server can remove it.
 app.use(cookieParser());
 
+//-----------------ROUTES-----------------
+// Routes import.
+import userRouter from "./routes/user.route.js";
+
+// Routes declaration.
+app.use("/api/v1/users", userRouter); //http://locahost:8000/api/v1/users/register
+
 export { app };
