@@ -17,8 +17,9 @@ const registerUser = asyncHandler(async (req, res) => {
   //if you are getting data from form or json body, you can access it through req.body
 
   // Get data from request body
+  // console.log("Req body:", req.body);
   const { userName, fullName, email, password } = req.body;
-  console.log(userName, fullName, email, password);
+  // console.log(userName, fullName, email, password);
 
   // Checking for all field details, if they are empty or not as a validation
   if (
@@ -28,7 +29,7 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   // checking if user exist in database, using email or userName.
-  const existedUser = User.findOne({
+  const existedUser = await User.findOne({
     $or: [{ email }, { userName }],
   });
   if (existedUser) {
@@ -36,19 +37,29 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   // get the images file disk storage path using multer.
+  // console.log("request files from multer:", req.files);
   const avatarLocalPath = req.files?.avatar[0]?.path;
-  const coverImageLocalPath = req.files?.coverImage[0]?.path;
+  // const coverImageLocalPath = req.files?.coverImage[0]?.path; //This line is throwing error.
 
-  // Check if avatar image file path is available or not as it is required.
+  let coverImageLocalPath;
+  if (
+    req.files &&
+    Array.isArray(req.files.coverImage) &&
+    req.files.coverImage.length > 0
+  ) {
+    // Since coverImage  is optional, it is still required to check if it's available or not.
+    coverImageLocalPath = req.files.coverImage[0];
+  }
   if (!avatarLocalPath) {
+    // Check if avatar image file path is available or not as it is required.
     throw new ApiError(400, "Avatar image is required.");
   }
   // Upload on cloudinary using local path.
   const avatar = await uploadOnCloudinary(avatarLocalPath);
   const coverImage = await uploadOnCloudinary(coverImageLocalPath);
 
-  // Again check if avatar image is available or not. It is necessary for database
   if (!avatar) {
+    // Again check if avatar image is available or not. It is necessary for database
     throw new ApiError(400, "Avatar image is required.");
   }
 
@@ -66,8 +77,8 @@ const registerUser = asyncHandler(async (req, res) => {
     "-password -refreshToken"
   );
 
-  // If user is not saved in database.
   if (!createdUser) {
+    // If user is not saved in database.
     throw new ApiError(500, "Somthing went wrong while registering a user.");
   }
 

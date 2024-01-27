@@ -10,7 +10,7 @@ const userSchema = new Schema(
         ref: "Video",
       },
     ],
-    username: {
+    userName: {
       type: String,
       required: [true, "Username is required."],
       unique: true,
