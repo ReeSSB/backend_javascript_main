@@ -10,6 +10,7 @@ export { asyncHandler };
 // const asyncHandler = (fn) =>{() => {}};
 // const asyncHandler = (fn) =>{async() => {}};
 
+// Either you can use this code below or written and used above. whatever you like. It works more synchronously
 // const asyncHandler = (fn) => {
 //   async (err, req, res, next) => {
 //     try {
