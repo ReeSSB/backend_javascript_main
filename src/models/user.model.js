@@ -49,7 +49,7 @@ const userSchema = new Schema(
   { timestamps: true }
 );
 
-// this is a middleware, comes primarily from mongoose, just saving it helps to run some function, here, we are running the bcrypt function to encrpyt password.
+// this is a middleware, comes primarily from mongoose, just before saving data it helps to run some function, here, we are running the bcrypt function to encrpyt password.
 userSchema.pre("save", async function (next) {
   if (this.isModified("password"))
     this.password = await bcrypt.hash(this.password, 10);
@@ -76,15 +76,14 @@ userSchema.methods.generateAccessToken = function (token) {
   );
 };
 
-userSchema.methods.generateRefreshToken = async function () {
+userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
     {
-      _id: this_id,
+      _id: this._id,
     },
-    process.env,
-    REFRESH_TOKEN_SECRET,
+    process.env.REFRESH_TOKEN_SECRET,
     {
-      expiresIn: REFRESH_TOKEN_EXPIRY,
+      expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
     }
   );
 };

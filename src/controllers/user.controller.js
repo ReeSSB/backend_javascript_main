@@ -3,7 +3,29 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import jwt from "jsonwebtoken";
 
+// Generate Access Token & Refresh Token
+const generateAccessAndRefreshTokens = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
+
+    // Save refresh token in database.
+    user.refreshToken = refreshToken;
+    await user.save({ validateBeforeSave: false });
+    return { accessToken, refreshToken };
+  } catch (error) {
+    throw new ApiError(
+      500,
+      "Something went wrong while generating access & refresh token"
+    );
+  }
+};
+
+// API END POINT for REGISTER
+// ******************** REGISTER CONTROLLER ********************
 const registerUser = asyncHandler(async (req, res) => {
   // get user details from frontend
   // validation - not empty
@@ -87,8 +109,173 @@ const registerUser = asyncHandler(async (req, res) => {
     .status(201)
     .json(new ApiResponse(200, createdUser, "User registered Successfully"));
 });
+
+// ******************** LOGIN CONTROLLER ********************
+// API END POINT for LOGIN
 const loginUser = asyncHandler(async (req, res) => {
-  res.status(200).json({ message: "ok" });
+  // req body => data
+  // username or email
+  // find the user
+  // password check
+  // access token and refresh token
+  // send cookies
+
+  const { userName, email, password } = req.body;
+
+  // Check if both username and email is available
+  // if (!userName && !email) {
+  //   throw new ApiError(400, "Username or email is required.");
+  // }
+
+  // Check if userName or email entered.
+  if (!(userName || email)) {
+    throw new ApiError(400, "Username or email is required");
+  }
+  // Check if password entered.
+  if (!password) {
+    throw new ApiError(400, "Password is required.");
+  }
+
+  // Check if user exist.
+  const user = await User.findOne({
+    $or: [{ userName }, { email }],
+  });
+
+  // Throw error if user dont exist.
+  if (!user) {
+    throw new ApiError(404, "User does not exist! Please register.");
+  }
+
+  // Validate Password
+  const isPasswordValid = await user.isPasswordCorrect(password);
+
+  // If password is wrong, throw error
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Wrong password entered.");
+  }
+
+  // Get Access Token & Refresh Token
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+    user._id
+  );
+
+  // Find user and help to login & deselect password & refresh token.
+  const loggedInUser = await User.findById(user._id).select(
+    "-password -refreshToken"
+  );
+
+  // send cookies property as options
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new ApiResponse(
+        200,
+        {
+          user: loggedInUser,
+          accessToken,
+          refreshToken,
+        },
+        "User logged in Successfully!"
+      )
+    );
 });
 
-export { registerUser, loginUser };
+// ******************** LOGOUT CONTROLLER ********************
+// API END POINT for LOGOUT
+// Log out user, here, you can access req.user from middle passed before lo
+const logoutUser = asyncHandler(async (req, res, next) => {
+  await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: {
+        refeshToken: undefined,
+      },
+    },
+    {
+      new: true,
+    }
+  );
+
+  // Send cookie options.
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
+  return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(new ApiResponse(200, {}, "User logged out!"));
+});
+
+// ******************** Get Refresh Access Token API ********************
+// It's an API END POINT - It  helps to get refresh token from user and match it with database , after access token get expire and get a new access token.
+
+const getRefreshAccessToken = asyncHandler(async (req, res, next) => {
+  const incomingRefreshToken =
+    req.cookies.refreshToken || req.body.refreshToken;
+
+  // If we don't recieve any refesh token.
+  if (!incomingRefreshToken) {
+    throw new ApiError(401, "Unauthorized access.");
+  }
+
+  // Put all functions in try and catch block
+  try {
+    // Decode recieved token from user to get some data.
+    // Note : refesh token has _id of user.
+    const decodedToken = jwt.verify(
+      incomingRefreshToken,
+      process.env.REFRESH_TOKEN_SECRET
+    );
+
+    // Let's find user by using _id recieved from token and get user details
+    const user = await User.findById(decodedToken?._id).select("-password");
+
+    // If user is not found throw error.
+    if (!user) {
+      throw new ApiError(401, "Invalid refresh token.");
+    }
+
+    // if received token and refresh token don't match throw error.
+    if (incomingRefreshToken !== user?.refreshToken) {
+      throw new ApiError(401, "Refresh token expired or used.");
+    }
+
+    // Send cookie options
+    const options = {
+      httpOnly: true,
+      secure: true,
+    };
+
+    // Destructure and get access to accessToken and refreshToken
+    // Here we have changes variable name to newRefreshToken (using alias) as because, with same name we are recieving refreshToken from database also.
+    const { accessToken, refreshToken: newRefreshToken } =
+      await generateAccessAndRefreshTokens(user._id);
+
+    // send response
+    res
+      .status(200)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", newRefreshToken, options)
+      .json(
+        new ApiResponse(
+          200,
+          { accessToken, newRefreshToken },
+          "Access token refresh."
+        )
+      );
+  } catch (error) {
+    throw new ApiError(401, error?.message || "Invalid refresh token.");
+  }
+});
+
+export { registerUser, loginUser, logoutUser, getRefreshAccessToken };

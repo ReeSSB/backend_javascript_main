@@ -40,5 +40,7 @@ import userRouter from "./routes/user.route.js";
 
 // Routes declaration.
 app.use("/api/v1/users", userRouter); //http://locahost:8000/api/v1/users/register
+//http://locahost:8000/api/v1/users/login
+//http://locahost:8000/api/v1/users/logout
 
 export { app };
