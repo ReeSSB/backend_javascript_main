@@ -52,6 +52,7 @@ const userSchema = new Schema(
 // this is a middleware, comes primarily from mongoose, just before saving data it helps to run some function, here, we are running the bcrypt function to encrpyt password.
 userSchema.pre("save", async function (next) {
   if (this.isModified("password"))
+    // if password is modified.
     this.password = await bcrypt.hash(this.password, 10);
   next();
 });

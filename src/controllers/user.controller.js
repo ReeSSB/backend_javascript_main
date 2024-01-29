@@ -199,6 +199,7 @@ const logoutUser = asyncHandler(async (req, res, next) => {
       },
     },
     {
+      // If new equal true, then after updating it return new object.
       new: true,
     }
   );
@@ -216,7 +217,7 @@ const logoutUser = asyncHandler(async (req, res, next) => {
     .json(new ApiResponse(200, {}, "User logged out!"));
 });
 
-// ******************** Get Refresh Access Token API ********************
+// ******************** GET REFRESH ACCESS TOKEN API ********************
 // It's an API END POINT - It  helps to get refresh token from user and match it with database , after access token get expire and get a new access token.
 
 const getRefreshAccessToken = asyncHandler(async (req, res, next) => {
@@ -262,7 +263,7 @@ const getRefreshAccessToken = asyncHandler(async (req, res, next) => {
       await generateAccessAndRefreshTokens(user._id);
 
     // send response
-    res
+    return res
       .status(200)
       .cookie("accessToken", accessToken, options)
       .cookie("refreshToken", newRefreshToken, options)
@@ -278,4 +279,162 @@ const getRefreshAccessToken = asyncHandler(async (req, res, next) => {
   }
 });
 
-export { registerUser, loginUser, logoutUser, getRefreshAccessToken };
+// ******************** CHANGE PASSWORD API ********************
+
+const changeCurrentPassword = asyncHandler(async (req, res, next) => {
+  // Get all details from request body
+  const { oldPassword, newPassword, confirmPassword } = req.body;
+
+  // Match new password and confirm password
+  if (newPassword !== confirmPassword) {
+    throw new ApiError(400, "Password did not match.");
+  }
+
+  // Find user by Id using req.user.id.
+  const user = await User.findById(req.user?._id);
+
+  // Compare password using method assigned on user
+  const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+
+  // If password is wrong.
+  if (!isPasswordCorrect) {
+    throw new ApiError(400, "Invalid old password.");
+  }
+
+  // If old password is correct, set new password in database. And preSave function for pasword will run and hash the password before saving it.
+  user.password = newPassword;
+  await user.save({ validateBeforeSave: false });
+
+  // response sent.
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "Password changed successfully."));
+});
+
+// ******************** FETCH CURRENT USER API ********************
+const getCurrentUser = asyncHandler(async (req, res, next) => {
+  const user = await User.findById(req.user?._id).select("-password");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Current user data fetched successfully"));
+});
+
+// ******************** UPDATE ACCOUNT DETAILS OF USER API ********************
+// Update account details API.
+const updateAccountDetails = asyncHandler(async (req, res, next) => {
+  const { fullName, email } = req.body;
+
+  // check if all details are provided or not.
+  if (!fullName || !email) {
+    throw new ApiError(400, "All fields are required.");
+  }
+
+  // Find user and update
+  const user = await User.findByIdAndUpdate(
+    req.user?._id,
+    {
+      $set: {
+        fullName: fullName,
+        email: email,
+      },
+    },
+    // If new equal true, then after updating it return new object
+    { new: true }
+  ).select("-password");
+
+  // Send response.
+  res
+    .status(200)
+    .json(new ApiResponse(200, user, "Account details updated successfully!"));
+});
+
+//  ******************** UPLOAD AVATAR IMAGE OF USER API ********************
+
+const updateUserAvatar = asyncHandler(async (req, res, next) => {
+  // Provide local path, because we are using multer middleware directly, we can use req.file
+  const avatarLocalPath = req.file?.path;
+
+  // If avatar local path is not available
+  if (!avatarLocalPath) {
+    throw new ApiError(400, "Avatar file is missing.");
+  }
+
+  try {
+    // Upload Avatar image on cloudinary
+    const avatar = await uploadOnCloudinary(avatarLocalPath);
+
+    // If avatar uploaded url not recieved throw error.
+    if (!avatar.url) {
+      throw new ApiError(500, "Error while uploading avatar.");
+    }
+
+    // Now, update avatar url in database by find id from databse using req.user?._id
+    const user = await User.findByIdAndUpdate(
+      req.user?._id,
+      { $set: { avatar: avatar.url } },
+      // If new equal true, then after updating it return new object
+      { new: true }
+    ).select("-password");
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, user, "Avatar image uploaded successfully."));
+  } catch (error) {
+    throw new ApiError(500, error?.message || "Error while uploading avatar.");
+  }
+});
+
+//  ******************** UPLOAD COVER IMAGE OF USER API ********************
+
+const updateUserCoverImage = asyncHandler(async (req, res, next) => {
+  // We need to use middleware multer to fetch file from request url
+  const coverImageLocalPath = req.file?.path;
+
+  //If cover image url not found
+  if (!coverImageLocalPath) {
+    throw new ApiError(400, "Cover image file not found.");
+  }
+
+  try {
+    // Upload cover image on cloudinary and recieve object which contain 'url'
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+
+    // Throw error if no url recieved
+    if (!coverImage.url) {
+      throw new ApiError(500, "Error while uploading cover image.");
+    }
+
+    // Find the data in database using User by quering through req.user?._id & update cover image url.
+    const user = await User.findByIdAndUpdate(
+      req.user?._id,
+      { $set: { coverImage: coverImage.url } },
+      // If new equal true, then after updating it return new object
+      { new: true }
+    ).select("-password");
+
+    // Return response
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, user, "Cover image uploaded ed successfully.")
+      );
+  } catch (error) {
+    throw new ApiError(
+      500,
+      error?.message || "Error while uploading cover image."
+    );
+  }
+});
+
+export {
+  registerUser,
+  loginUser,
+  logoutUser,
+  getRefreshAccessToken,
+  changeCurrentPassword,
+  getCurrentUser,
+  updateAccountDetails,
+  updateUserAvatar,
+  updateUserCoverImage,
+};
