@@ -194,8 +194,12 @@ const logoutUser = asyncHandler(async (req, res, next) => {
   await User.findByIdAndUpdate(
     req.user?._id,
     {
-      $set: {
-        refeshToken: undefined,
+      // $set: {
+      //   refeshToken: undefined,
+      // },
+      $unset: {
+        // $unset is better approach than above code. Flag to field you wanto unset to 1.
+        refreshToken: 1, //this removes the field from document.
       },
     },
     {
