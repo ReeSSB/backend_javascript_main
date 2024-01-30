@@ -1,20 +1,21 @@
 import mongoose, { Schema } from "mongoose";
 
 // To keep subscriber data.
-const subscriberSchema = new Schema({
-  subcriber: {
-    types: Schema.Types.ObjectId,
-    ref: "User",
-  },
-});
+// const subscriberSchema = new Schema({
+//   subscriber: {
+//     types: Schema.Types.ObjectId,
+//     ref: "User",
+//   },
+// });
 
 // Subscription Schema
 const subscriptionSchema = new Schema(
   {
-    subscribers: {
-      type: [subscriberSchema], //array - one who is subscribing.
+    subscriber: {
+      type: Schema.Types.ObjectId, //array - one who is subscribing.
+      ref: "User",
     },
-    channels: {
+    channel: {
       types: Schema.Types.ObjectId, //getting subscribed by user
       ref: "User",
     },

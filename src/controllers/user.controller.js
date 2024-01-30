@@ -353,6 +353,7 @@ const updateAccountDetails = asyncHandler(async (req, res, next) => {
 
 const updateUserAvatar = asyncHandler(async (req, res, next) => {
   // Provide local path, because we are using multer middleware directly, we can use req.file
+  console.log(req.file?.path);
   const avatarLocalPath = req.file?.path;
 
   // If avatar local path is not available
@@ -364,12 +365,20 @@ const updateUserAvatar = asyncHandler(async (req, res, next) => {
     // Upload Avatar image on cloudinary
     const avatar = await uploadOnCloudinary(avatarLocalPath);
 
+    console.log("avatar:", avatar);
     // If avatar uploaded url not recieved throw error.
     if (!avatar.url) {
       throw new ApiError(500, "Error while uploading avatar.");
     }
 
-    // Now, update avatar url in database by find id from databse using req.user?._id
+    // testing for old file delete
+    const oldFileData = await User.findOne(req.user?._id).select(
+      "-password -fullName -watchHistory -email -refreshToken"
+    );
+    console.log("OlDFileData-Avatar: ", oldFileData?.avatar);
+
+    // Now, update avatar url in database by find id from database using req.user?._id
+
     const user = await User.findByIdAndUpdate(
       req.user?._id,
       { $set: { avatar: avatar.url } },
@@ -379,7 +388,9 @@ const updateUserAvatar = asyncHandler(async (req, res, next) => {
 
     return res
       .status(200)
-      .json(new ApiResponse(200, user, "Avatar image uploaded successfully."));
+      .json(
+        new ApiResponse(200, { user }, "Avatar image uploaded successfully.")
+      );
   } catch (error) {
     throw new ApiError(500, error?.message || "Error while uploading avatar.");
   }
@@ -427,6 +438,152 @@ const updateUserCoverImage = asyncHandler(async (req, res, next) => {
   }
 });
 
+//  ******************** GET USER CHANNEL PROFILE API ********************
+const getUserChannelProfile = asyncHandler(async (req, res, next) => {
+  const { userName } = req.params;
+
+  // If username is not found.
+  if (!userName?.trim()) {
+    throw new ApiError(400, "Username is missing.");
+  }
+  try {
+    // Written mongodb aggregation
+    const channel = await User.aggregate([
+      {
+        $match: {
+          userName: userName?.toLowerCase(),
+        },
+      },
+      {
+        $lookup: {
+          from: "subscription",
+          localField: "_id",
+          foreignField: "channel",
+          as: "subscribers",
+        },
+      },
+      {
+        $lookup: {
+          from: "subscription",
+          localField: "_id",
+          foreignField: "subscriber",
+          as: "subscribedTo",
+        },
+      },
+      {
+        $addFields: {
+          subscribersCount: {
+            $size: "$subscribers",
+          },
+          channelsSubscribedToCount: {
+            $size: "$subscribedTo",
+          },
+          isSubscribed: {
+            $cond: {
+              if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+              then: true,
+              else: false,
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          fullName: 1,
+          userName: 1,
+          subscribersCount: 1,
+          channelsSubscribedToCount: 1,
+          isSubscribed: 1,
+          avatar: 1,
+          coverImage: 1,
+          email: 1,
+          createdAt: 1,
+        },
+      },
+    ]);
+
+    // If there is no channel
+    if (!channel?.length) {
+      throw new ApiError(404, "No channel found!");
+    }
+
+    // Response sent
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, channel[0], "User channel fetched successfully!")
+      );
+  } catch (error) {
+    throw new ApiError(
+      500,
+      error?.message || "Error while getting user channel profile."
+    );
+  }
+});
+
+//  ******************** GET USER WATCH HISTORY API ********************
+
+const getWatchHistory = asyncHandler(async (req, res, next) => {
+  // Here behind the scene mongoose works and gives us string instead of objectId, but in mongodb we recieve objectId.
+  // req.user?._id;
+
+  const user = await User.aggregate([
+    {
+      $match: {
+        // Here inside mongodb we need to convert string to objectId data types, that's why we used mongoose.Types.ObjectId()
+        _id: new mongoose.Types.ObjectId(req.user?._id),
+      },
+    },
+    {
+      $lookup: {
+        // Left Join
+        from: "videos",
+        localField: "watchHistory",
+        foreignField: "_id",
+        as: "watchHistory",
+        pipeline: [
+          {
+            // Nested lookup
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "owner",
+              pipeline: [
+                {
+                  $project: {
+                    fullName: 1,
+                    userName: 1,
+                    avatar: 1,
+                  },
+                },
+              ],
+            },
+          },
+          // to get all required document of array of array
+          {
+            $addFields: {
+              owner: {
+                $first: "$owner",
+              },
+            },
+          },
+        ],
+      },
+    },
+  ]);
+
+  res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        user[0].watchHistory,
+        "Watch history fetched successfully."
+      )
+    );
+});
+
 export {
   registerUser,
   loginUser,
@@ -437,4 +594,6 @@ export {
   updateAccountDetails,
   updateUserAvatar,
   updateUserCoverImage,
+  getUserChannelProfile,
+  getWatchHistory,
 };
