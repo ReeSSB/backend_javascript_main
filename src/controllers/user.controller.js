@@ -353,7 +353,7 @@ const updateAccountDetails = asyncHandler(async (req, res, next) => {
 
 const updateUserAvatar = asyncHandler(async (req, res, next) => {
   // Provide local path, because we are using multer middleware directly, we can use req.file
-  console.log(req.file?.path);
+  // console.log(req.file?.path);
   const avatarLocalPath = req.file?.path;
 
   // If avatar local path is not available
@@ -440,10 +440,10 @@ const updateUserCoverImage = asyncHandler(async (req, res, next) => {
 
 //  ******************** GET USER CHANNEL PROFILE API ********************
 const getUserChannelProfile = asyncHandler(async (req, res, next) => {
-  const { userName } = req.params;
+  const { username } = req.params;
 
   // If username is not found.
-  if (!userName?.trim()) {
+  if (!username?.trim()) {
     throw new ApiError(400, "Username is missing.");
   }
   try {
@@ -451,7 +451,7 @@ const getUserChannelProfile = asyncHandler(async (req, res, next) => {
     const channel = await User.aggregate([
       {
         $match: {
-          userName: userName?.toLowerCase(),
+          userName: username?.toLowerCase(),
         },
       },
       {
